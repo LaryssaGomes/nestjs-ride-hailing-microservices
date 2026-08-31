@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/api-gateway/src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "builder": "webpack",
+    "tsConfigPath": "apps/api-gateway/tsconfig.app.json"
+  },
+  "monorepo": true,
+  "root": "apps/api-gateway",
+  "projects": {
+    "api-gateway": {
+      "type": "application",
+      "root": "apps/api-gateway",
+      "entryFile": "main",
+      "sourceRoot": "apps/api-gateway/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api-gateway/tsconfig.app.json"
+      }
+    },
+    "authentications": {
+      "type": "application",
+      "root": "apps/authentications",
+      "entryFile": "main",
+      "sourceRoot": "apps/authentications/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/authentications/tsconfig.app.json",
+        "webpackConfigPath": "apps/authentications/webpack.config.js"
+      }
+    },
+    "logging": {
+      "type": "application",
+      "root": "apps/logging",
+      "entryFile": "main",
+      "sourceRoot": "apps/logging/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/logging/tsconfig.app.json"
+      }
+    },
+    "logging-service": {
+      "type": "application",
+      "root": "apps/logging-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/logging-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/logging-service/tsconfig.app.json"
+      }
+    },
+    "rider": {
+      "type": "application",
+      "root": "apps/rider",
+      "entryFile": "main",
+      "sourceRoot": "apps/rider/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/rider/tsconfig.app.json"
+      }
+    },
+    "rider-contracts": {
+      "type": "library",
+      "root": "libs/rider-contracts",
+      "entryFile": "index",
+      "sourceRoot": "libs/rider-contracts/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/rider-contracts/tsconfig.lib.json"
+      }
+    },
+    "auth-contracts": {
+      "type": "library",
+      "root": "libs/auth-contracts",
+      "entryFile": "index",
+      "sourceRoot": "libs/auth-contracts/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/auth-contracts/tsconfig.lib.json"
+      }
+    },
+    "rider-service": {
+      "type": "application",
+      "root": "apps/rider-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/rider-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/rider-service/tsconfig.app.json"
+      }
+    }
+  }
+}

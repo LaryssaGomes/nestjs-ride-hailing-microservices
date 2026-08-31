@@ -1,0 +1,108 @@
+# Full stack for a single-VM deploy (e.g. an Oracle Cloud Always Free instance).
+# Unlike docker-compose.yml (local dev), the databases/broker are NOT published
+# to the host here - only api-gateway is reachable from outside the machine.
+services:
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    volumes:
+      - mongo_data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: riders_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  postgres-auth:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: authDb
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: api-gateway
+    restart: always
+    depends_on:
+      - rabbitmq
+    environment:
+      PORT: 3010
+      RABBITMQ_URL: amqp://user:password@rabbitmq:5672
+    ports:
+      - 3010:3010
+
+  authentications:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: authentications
+    restart: always
+    depends_on:
+      - postgres-auth
+      - rabbitmq
+    environment:
+      PORT: 3011
+      RABBITMQ_URL: amqp://user:password@rabbitmq:5672
+      DATABASE_URL: postgres://postgres:root@postgres-auth:5432/authDb?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-.env}
+
+  rider:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: rider
+    restart: always
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      PORT: 3012
+      RABBITMQ_URL: amqp://user:password@rabbitmq:5672
+      RIDER_DATABASE_URL: postgres://root:root@postgres:5432/riders_db
+
+  logging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: logging
+    restart: always
+    depends_on:
+      - mongo
+      - rabbitmq
+    environment:
+      PORT: 3013
+      RABBITMQ_URL: amqp://user:password@rabbitmq:5672
+      MONGO_URI: mongodb://root:root@mongo:27017/logging-db?authSource=admin
+
+volumes:
+  rabbitmq_data:
+  postgres_data:
+  postgres_auth_data:
+  mongo_data:
