@@ -1,0 +1,25 @@
+name: Deploy
+
+# Roda quando faz push na main, ou manualmente pela aba "Actions" no GitHub.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
+
+      # Assume que o repo já foi clonado uma vez na VM em ~/app,
+      # e que existe um .env em ~/app com o JWT_SECRET (não versionado no git).
+      - name: Atualizar código e reiniciar os containers na VM
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" \
+            "cd ~/app && git pull && docker compose -f docker-compose.prod.yml up -d --build"
