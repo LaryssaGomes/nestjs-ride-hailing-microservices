@@ -6,14 +6,14 @@ export const DEMO_HTML = `<!doctype html>
 <title>Ride Hailing Microservices - Demo</title>
 <style>
   :root {
-    --bg: #0f172a;
-    --panel: #16213e;
-    --border: #29314f;
-    --text: #e6e9f2;
-    --muted: #93a0c2;
-    --accent: #22d3ee;
-    --mq: #ff8a3d;
-    --ok: #34d399;
+    --bg: #0d0d10;
+    --panel: #17171c;
+    --border: #2a2a32;
+    --text: #ece8e1;
+    --muted: #96938c;
+    --accent: #e0a339;
+    --mq: #ff6600;
+    --ok: #7c93b3;
   }
   * { box-sizing: border-box; }
   body {
@@ -60,7 +60,7 @@ export const DEMO_HTML = `<!doctype html>
   }
   button {
     background: var(--accent);
-    color: #04222b;
+    color: #241a08;
     border: none;
     padding: 8px 10px;
     border-radius: 6px;
@@ -91,7 +91,7 @@ export const DEMO_HTML = `<!doctype html>
   #monitor h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 16px 20px 8px; }
   #diagram-wrap { max-width: 560px; margin: 0 auto; padding: 0 20px; width: 100%; }
   #diagram rect {
-    fill: #1c2846;
+    fill: #1c1c22;
     stroke: var(--border);
     stroke-width: 1;
     transition: fill 0.15s ease, stroke 0.15s ease;
@@ -107,7 +107,7 @@ export const DEMO_HTML = `<!doctype html>
     position: fixed;
     display: none;
     max-width: 240px;
-    background: #0a1122;
+    background: #08080a;
     border: 1px solid var(--border);
     color: var(--text);
     font-size: 12px;
@@ -124,7 +124,7 @@ export const DEMO_HTML = `<!doctype html>
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    background: #0a1122;
+    background: #08080a;
     margin: 12px 20px 20px;
     border-radius: 6px;
     padding: 10px 12px;
