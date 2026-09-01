@@ -17,9 +17,10 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
 
-      # Assume que o repo já foi clonado uma vez na VM em ~/app,
-      # e que existe um .env em ~/app com o JWT_SECRET (não versionado no git).
+      # Assume que o repo já foi clonado uma vez na VM em ~/uber-services,
+      # e que existe um .env em ~/uber-services com o JWT_SECRET (não versionado no git).
+      # -p uber-services isola essa stack de qualquer outro projeto que já rode na mesma máquina.
       - name: Atualizar código e reiniciar os containers na VM
         run: |
           ssh -i ~/.ssh/id_ed25519 "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" \
-            "cd ~/app && git pull && docker compose -f docker-compose.prod.yml up -d --build"
+            "cd ~/uber-services && git pull && docker compose -p uber-services -f docker-compose.prod.yml up -d --build"

@@ -2,6 +2,8 @@
 
 Guia passo a passo pra colocar a stack inteira no ar numa VM Ampere A1 (ARM) gratuita, e deixar o deploy automatizado via GitHub Actions.
 
+> **Nota:** neste caso a instância Ampere A1 já existia e já roda outro app (não é uma VM dedicada só pra este projeto). Os passos 1 e 3 originais (criar instância, instalar Docker) foram substituídos por "reaproveitar a instância existente" — o restante do guia vale igual. A pasta do projeto na VM é `~/uber-services` (não `~/app`), e todo comando `docker compose` usa `-p uber-services` pra isolar essa stack de qualquer outra que já rode na máquina.
+
 ## 0. Antes de começar
 
 Gere **um único par de chaves SSH** — ele vai servir tanto pra você acessar a VM quanto pro GitHub Actions fazer o deploy automático:
@@ -12,16 +14,20 @@ ssh-keygen -t ed25519 -f ~/.ssh/oracle-uber-deploy -C "deploy-uber-services"
 
 Isso cria `~/.ssh/oracle-uber-deploy` (privada) e `~/.ssh/oracle-uber-deploy.pub` (pública). Guarde as duas — a pública você usa na criação da VM, a privada vai virar secret do GitHub no passo 6.
 
-## 1. Criar a instância na Oracle Cloud
+## 1. Reaproveitar a instância existente
 
-1. Crie a conta em [cloud.oracle.com](https://cloud.oracle.com) (pede cartão pra verificação de identidade, mas nada é cobrado dentro do Always Free).
-2. **Compute → Instances → Create Instance**.
-3. Shape: **VM.Standard.A1.Flex**, 2 OCPU / 12 GB (o teto atual do Always Free — a Oracle cortou pela metade em jun/2026, antes era 4 OCPU/24GB).
-4. Imagem: **Ubuntu 24.04** (evita as regras de firewall padrão mais restritivas de imagens Oracle Linux).
-5. Em "Add SSH keys", cole o conteúdo de `oracle-uber-deploy.pub`.
-6. Anote o **IP público** da instância quando ela subir.
+Já existe uma instância Ampere A1 rodando (com outro app junto — não é dedicada). Em vez de criar uma nova:
 
-Se der erro de "Out of host capacity" no shape Ampere: tente outro Availability Domain, ou tente de novo mais tarde — é um problema conhecido de disponibilidade regional, não é erro seu.
+1. Confirme que sobra memória/disco pra mais uma stack (`free -h` e `df -h /` na VM).
+2. Confirme quais portas já estão em uso (`docker ps`) — nossa stack só precisa da porta `3010` livre no host; o resto (Postgres, Mongo, RabbitMQ) fica só na rede interna do Docker, sem publicar porta.
+3. Autorize a nova chave de deploy na instância — conecte com a chave que você **já usa** nela hoje e adicione a chave pública gerada no passo 0:
+   ```bash
+   ssh -i <sua-chave-atual> ubuntu@<IP_DA_VM> \
+     "echo '$(cat ~/.ssh/oracle-uber-deploy.pub)' >> ~/.ssh/authorized_keys"
+   ```
+   Depois disso, `ssh -i ~/.ssh/oracle-uber-deploy ubuntu@<IP_DA_VM>` já funciona.
+
+Não pare, reinicie ou redimensione essa instância — outro app depende dela.
 
 ## 2. Abrir a porta (duas camadas de firewall)
 
@@ -37,33 +43,23 @@ sudo ufw status
 ```
 Se houver regra bloqueando, libere a porta 3010 (`sudo ufw allow 3010/tcp` se o ufw estiver ativo).
 
-## 3. Conectar e instalar o Docker
+## 3. Conectar (Docker já está instalado nessa instância)
 
 ```bash
 ssh -i ~/.ssh/oracle-uber-deploy ubuntu@<IP_DA_VM>
 ```
 
-Na VM:
-```bash
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER
-# saia e reconecte pra aplicar o grupo docker (evita precisar de sudo em todo comando)
-exit
-```
-
 ## 4. Clonar o repositório
 
-Reconecte (`ssh -i ~/.ssh/oracle-uber-deploy ubuntu@<IP_DA_VM>`) e:
-
 ```bash
-git clone <URL_DO_SEU_REPO> ~/app
-cd ~/app
+git clone <URL_DO_SEU_REPO> ~/uber-services
+cd ~/uber-services
 ```
 
 ## 5. Criar o `.env` (não vai pro git)
 
 ```bash
-echo "JWT_SECRET=$(openssl rand -hex 32)" > ~/app/.env
+echo "JWT_SECRET=$(openssl rand -hex 32)" > ~/uber-services/.env
 ```
 
 Esse arquivo fica só na VM e não é sobrescrito por `git pull` (está no `.gitignore`).
@@ -71,11 +67,11 @@ Esse arquivo fica só na VM e não é sobrescrito por `git pull` (está no `.git
 ## 6. Primeiro deploy manual
 
 ```bash
-cd ~/app
-docker compose -f docker-compose.prod.yml up -d --build
+cd ~/uber-services
+docker compose -p uber-services -f docker-compose.prod.yml up -d --build
 ```
 
-Isso builda as 4 imagens (api-gateway, authentications, rider, logging) e sobe tudo junto com Mongo/RabbitMQ/Postgres x2. Só o `api-gateway` fica acessível de fora, na porta 3010.
+O `-p uber-services` nomeia essa stack como um projeto Compose separado, isolado de qualquer outro conjunto de containers que já rode na mesma máquina. Isso builda as 4 imagens (api-gateway, authentications, rider, logging) e sobe tudo junto com Mongo/RabbitMQ/Postgres x2 — nenhum deles publica porta no host, só o `api-gateway` fica acessível de fora, na porta 3010.
 
 Teste de fora da VM:
 ```bash
@@ -98,11 +94,11 @@ Depois disso, todo `git push` na `main` faz o GitHub entrar na VM, dar `git pull
 
 ## 8. Checklist rápido
 
-- [ ] VM criada (2 OCPU / 12GB, Ubuntu 24.04 ARM64)
+- [ ] Memória/disco conferidos na instância existente (`free -h`, `df -h /`)
+- [ ] Chave de deploy autorizada em `~/.ssh/authorized_keys` da instância
 - [ ] Porta 3010 liberada na Security List e no firewall do SO
-- [ ] Docker instalado na VM
-- [ ] Repo clonado em `~/app`
+- [ ] Repo clonado em `~/uber-services`
 - [ ] `.env` criado na VM com `JWT_SECRET`
-- [ ] Primeiro `docker compose up -d --build` rodado manualmente e `/health` respondendo
+- [ ] Primeiro `docker compose -p uber-services up -d --build` rodado manualmente e `/health` respondendo
 - [ ] 3 secrets cadastrados no GitHub
 - [ ] Push de teste na `main` disparou o workflow com sucesso
