@@ -21,7 +21,7 @@ import {
           urls: [
             process.env.RABBITMQ_URL ?? 'amqp://user:password@localhost:5673',
           ],
-          queue: 'rider_coordinates_queue',
+          queue: 'rider_queue',
           queueOptions: {
             durable: false,
           },
