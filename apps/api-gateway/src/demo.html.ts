@@ -251,7 +251,7 @@ export const DEMO_HTML = `<!doctype html>
     var el = document.getElementById(id);
     if (!el) return;
     el.classList.add('active');
-    setTimeout(function () { el.classList.remove('active'); }, 450);
+    setTimeout(function () { el.classList.remove('active'); }, 900);
   }
 
   function chase(routeName) {
@@ -267,7 +267,7 @@ export const DEMO_HTML = `<!doctype html>
     document.getElementById('diagram').appendChild(dot);
     flash(steps[0].id);
 
-    var segDuration = 240;
+    var segDuration = 700;
     var segIndex = 0;
 
     function animateSegment() {
