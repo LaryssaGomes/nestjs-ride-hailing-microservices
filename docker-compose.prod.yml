@@ -39,6 +39,11 @@ services:
       POSTGRES_DB: authDb
     volumes:
       - postgres_auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d authDb"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   api-gateway:
     build:
@@ -55,6 +60,23 @@ services:
     ports:
       - 3010:3010
 
+  # Applies pending Prisma migrations against postgres-auth, then exits.
+  # authentications waits for this to finish successfully before starting.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+      args:
+        APP_NAME: authentications
+    working_dir: /app/apps/authentications
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:root@postgres-auth:5432/authDb?schema=public
+    command: npx prisma migrate deploy
+
   authentications:
     build:
       context: .
@@ -63,8 +85,12 @@ services:
         APP_NAME: authentications
     restart: always
     depends_on:
-      - postgres-auth
-      - rabbitmq
+      migrate:
+        condition: service_completed_successfully
+      postgres-auth:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     environment:
       PORT: 3011
       RABBITMQ_URL: amqp://user:password@rabbitmq:5672
