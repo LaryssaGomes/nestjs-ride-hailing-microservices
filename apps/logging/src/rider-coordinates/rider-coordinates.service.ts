@@ -22,7 +22,7 @@ export class RiderCoordinatesService {
   ): Promise<{ coordinates: RiderCoordinates[]; riders: unknown }> {
     const coordinates = await this.riderCoodinateModel.find({ riderId });
     const pattern = { cmd: 'get-rider' };
-    const payload = { riderId };
+    const payload = { id: riderId };
     const riders = (await firstValueFrom(
       this.client.send(pattern, payload),
     )) as unknown;

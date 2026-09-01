@@ -6,12 +6,14 @@ import {
   Param,
   UseGuards,
   Req,
+  Header,
 } from '@nestjs/common';
 import { AuthGuard } from './auth/auth/auth.guard';
 import { ApiGatewayService } from './api-gateway.service';
 import { CreateRiderDto, CreateCoordinatesDTO } from '@app/rider-contracts';
 import { LoginDto, RegisterDto } from '@app/auth-contracts';
 import { AuthService } from './auth.service';
+import { DEMO_HTML } from './demo.html';
 
 @Controller()
 export class ApiGatewayController {
@@ -23,6 +25,12 @@ export class ApiGatewayController {
   @Get('health')
   health() {
     return { status: 'ok' };
+  }
+
+  @Get('demo')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  demo() {
+    return DEMO_HTML;
   }
 
   @Post('riders')
