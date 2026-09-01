@@ -45,6 +45,8 @@ export class AuthenticationsService {
       data: {
         email: userDto.email,
         password: hashedPassword,
+        firstName: userDto.firstName,
+        lastName: userDto.lastName,
       },
     });
     const rider = await firstValueFrom(
