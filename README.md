@@ -1,98 +1,117 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Ride Hailing Microservices
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend de um app estilo Uber, construído como um monorepo NestJS com 4 microsserviços independentes que se comunicam de forma assíncrona via **RabbitMQ**, cada um com seu próprio banco de dados.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+**[Live demo →](https://rides.catverse.com.br/demo)**
 
-## Description
+## Arquitetura
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Todo tráfego externo entra pelo `api-gateway`, que expõe a API REST/HTTP e traduz cada chamada em uma mensagem RPC para o microsserviço dono daquele domínio. Os serviços internos não têm porta HTTP pública — só conversam entre si (e com o gateway) por filas do RabbitMQ.
 
-## Project setup
-
-```bash
-$ npm install
+```
+                         HTTP (porta 3010)
+                              │
+                        ┌─────▼─────┐
+                        │ api-gateway│
+                        └─────┬─────┘
+                              │ RPC via RabbitMQ
+           ┌──────────────────┼──────────────────┐
+           │                  │                  │
+   ┌───────▼───────┐  ┌───────▼───────┐  ┌───────▼───────┐
+   │ authentications│  │     rider     │  │    logging    │
+   │  auth_queue    │  │  rider_queue  │  │coordinate_    │
+   │                │  │               │  │ rider_queue   │
+   └───────┬───────┘  └───────┬───────┘  └───────┬───────┘
+           │                  │                  │
+     ┌─────▼─────┐      ┌─────▼─────┐      ┌─────▼─────┐
+     │ Postgres  │      │ Postgres  │      │  MongoDB  │
+     │ (authDb)  │      │(riders_db)│      │(logging-db)│
+     └───────────┘      └───────────┘      └───────────┘
 ```
 
-## Compile and run the project
+No cadastro (`POST /auth/register`), o `authentications` cria o usuário e dispara uma mensagem `create-rider` para o serviço `rider`, que cria o perfil de passageiro correspondente — um exemplo de orquestração entre serviços via fila.
+
+## Serviços
+
+| Serviço | Porta HTTP | Fila RabbitMQ | Banco | Responsabilidade |
+|---|---|---|---|---|
+| `api-gateway` | 3010 | — (cliente das outras filas) | — | Único ponto de entrada HTTP; valida JWT e roteia para os demais serviços |
+| `authentications` | 3011 | `auth_queue` | PostgreSQL (Prisma) | Cadastro/login, hash de senha (bcrypt) e emissão/validação de JWT |
+| `rider` | 3012 | `rider_queue` | PostgreSQL (TypeORM) | CRUD de passageiros (riders) |
+| `logging` | 3013 | `coordinate_rider_queue` | MongoDB (Mongoose) | Recebe e armazena coordenadas de localização dos riders |
+
+Cada serviço também expõe `GET /health` na própria porta, usado pelos healthchecks do deploy.
+
+## Stack
+
+- **NestJS 11** (monorepo, um projeto por app em `apps/`, contratos compartilhados em `libs/`)
+- **RabbitMQ** para comunicação entre serviços (`@nestjs/microservices`, transporte RMQ)
+- **PostgreSQL** — via **Prisma** no `authentications` e via **TypeORM** no `rider`
+- **MongoDB** (Mongoose) no `logging`
+- **JWT** (`@nestjs/jwt`) + `bcrypt` para autenticação
+- **class-validator** / **class-transformer** para validação de DTOs compartilhados
+- **Docker** multi-stage build (uma única imagem parametrizada por `--build-arg APP_NAME`) + **Docker Compose**
+- **GitHub Actions** para deploy contínuo
+
+## API (via api-gateway)
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/auth/register` | Cria usuário + rider correspondente |
+| `POST` | `/auth/login` | Retorna JWT |
+| `GET` | `/auth/profile` | Perfil do usuário autenticado (requer `Authorization: Bearer <token>`) |
+| `POST` | `/riders` | Cria um rider |
+| `GET` | `/riders` | Lista todos os riders |
+| `GET` | `/riders/:id` | Busca um rider por id |
+| `POST` | `/riders/coordinates` | Registra uma coordenada de localização |
+| `GET` | `/riders/coordinates/:id` | Histórico de coordenadas de um rider |
+| `GET` | `/demo` | Página de demonstração interativa |
+| `GET` | `/health` | Healthcheck |
+
+## Rodando localmente
+
+Pré-requisitos: Node 22+, Docker e Docker Compose.
 
 ```bash
-# development
-$ npm run start
+# sobe RabbitMQ, MongoDB e os 2 Postgres (auth e rider)
+docker compose up -d
 
-# watch mode
-$ npm run start:dev
+npm install
 
-# production mode
-$ npm run start:prod
+# roda os 4 serviços juntos, em watch mode
+npm run start:all:dev
 ```
 
-## Run tests
+O `api-gateway` sobe em `http://localhost:3010` — abra `http://localhost:3010/demo` para a página de demonstração, ou o painel do RabbitMQ em `http://localhost:15673` (usuário/senha: `user`/`password`).
 
-```bash
-# unit tests
-$ npm run test
+Cada serviço lê sua própria configuração via variáveis de ambiente (com defaults para desenvolvimento local caso não sejam definidas):
 
-# e2e tests
-$ npm run test:e2e
+| Variável | Usada por | Default local |
+|---|---|---|
+| `RABBITMQ_URL` | todos | `amqp://user:password@localhost:5673` |
+| `PORT` | todos | 3010/3011/3012/3013 |
+| `DATABASE_URL` | `authentications` (Prisma) | ver `apps/authentications/.env` |
+| `JWT_SECRET` | `authentications` | — |
+| `RIDER_DATABASE_URL` | `rider` (TypeORM) | `postgres://root:root@localhost:5432/riders_db` |
+| `MONGO_URI` | `logging` | `mongodb://root:root@localhost:27018/logging-db?authSource=admin` |
 
-# test coverage
-$ npm run test:cov
+## Deploy
+
+A stack de produção (`docker-compose.prod.yml`) sobe tudo em containers isolados numa única VM, expondo só o `api-gateway`; o restante (bancos e broker) fica acessível apenas na rede interna do Docker. Deploy contínuo via GitHub Actions a cada push na `main`. Passo a passo completo em [DEPLOY.md](DEPLOY.md).
+
+## Estrutura do projeto
+
+```
+apps/
+  api-gateway/       # gateway HTTP + JWT guard
+  authentications/    # auth (Prisma/Postgres)
+  rider/              # riders (TypeORM/Postgres)
+  logging/            # coordenadas (Mongoose/MongoDB)
+libs/
+  auth-contracts/     # DTOs compartilhados de auth
+  rider-contracts/    # DTOs compartilhados de rider/coordinates
 ```
 
-## Deployment
+## Licença
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+UNLICENSED — projeto pessoal de estudo/portfólio.
